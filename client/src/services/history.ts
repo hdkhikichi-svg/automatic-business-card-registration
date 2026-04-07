@@ -1,4 +1,3 @@
-import type { ScanResult } from '../types/BusinessCard';
 
 export interface ScanRecord {
   id: string;
