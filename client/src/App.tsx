@@ -18,7 +18,6 @@ interface QueueItem {
 function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
   const [googleToken, setGoogleToken] = useState<string>('');
-  const [geminiKey, setGeminiKey] = useState<string>('');
   const [stats, setStats] = useState({ totalCount: 0, monthCount: 0, recent: [] as ScanRecord[] });
   
   // バッチスキャン用のキュー
@@ -29,8 +28,7 @@ function App() {
   const addFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // 初回ロード時に状態を復元
-    setGeminiKey(localStorage.getItem('GEMINI_API_KEY') || '');
+    // 初回ロード時に状態を復元 (Googleトークンのみ)
     setGoogleToken(localStorage.getItem('GOOGLE_ACCESS_TOKEN') || '');
     refreshStats();
   }, []);
@@ -51,7 +49,6 @@ function App() {
   });
 
   const handleSaveSettings = () => {
-    localStorage.setItem('GEMINI_API_KEY', geminiKey);
     alert('設定を保存しました。');
   };
 
@@ -76,11 +73,6 @@ function App() {
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    if (!localStorage.getItem('GEMINI_API_KEY')) {
-      alert('設定タブから Gemini API キーを登録してください！');
-      setActiveTab('settings');
-      return;
-    }
 
     const newItems: QueueItem[] = Array.from(files).map(file => ({
       id: Math.random().toString(36).substr(2, 9),
@@ -403,15 +395,16 @@ function App() {
                   </button>
                 </div>
                 
-                <div>
-                  <label className="text-xs font-semibold text-slate-500 block mb-1">Gemini API キー</label>
-                  <input 
-                    type="password" 
-                    value={geminiKey}
-                    onChange={(e) => setGeminiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                  />
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <label className="text-xs font-semibold text-slate-500 block mb-1">Gemini AI 解析エンジン</label>
+                  <p className="text-sm text-slate-700">
+                    <span className="inline-flex items-center gap-1.5 text-green-600 font-bold">
+                      <CheckCircle size={14} /> サーバー側で安全に管理されています
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-2">
+                    ※APIキーをバックエンドで管理するように移行したため、ユーザー側でのキー入力は不要になりました。
+                  </p>
                 </div>
               </div>
 
