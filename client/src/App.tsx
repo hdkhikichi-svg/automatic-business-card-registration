@@ -179,7 +179,7 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-[100dvh] bg-slate-50 text-slate-900 font-sans overflow-hidden">
+    <div className="flex flex-col h-dvh bg-slate-50 text-slate-900 font-sans overflow-hidden">
       {/* Header */}
       <header className="bg-white px-4 py-4 md:py-6 shadow-sm border-b border-slate-200 flex justify-between items-center z-10 shrink-0">
         <h1 className="text-lg md:text-2xl font-bold bg-linear-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent italic tracking-tight truncate pr-4">
@@ -249,7 +249,7 @@ function App() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 flex-1 content-start auto-rows-max overflow-y-auto">
                   
                   {queue.map((item) => (
-                    <div key={item.id} className="relative aspect-[4/3] rounded-xl overflow-hidden shadow-sm border group">
+                    <div key={item.id} className="relative aspect-4/3 rounded-xl overflow-hidden shadow-sm border group">
                       <img src={item.previewUrl} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt="card" />
                       
                       {/* Status Overlay */}
@@ -288,7 +288,7 @@ function App() {
 
                   {/* Add More Button inside grid */}
                   {!isProcessingQueue && (
-                    <label className="aspect-[4/3] rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50 flex flex-col items-center justify-center cursor-pointer transition-colors group">
+                    <label className="aspect-4/3 rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50 flex flex-col items-center justify-center cursor-pointer transition-colors group">
                       <input 
                         type="file" 
                         accept="image/*" 
