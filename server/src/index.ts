@@ -4,7 +4,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import path from 'path';
+import fs from 'fs/promises';
 import { exec } from 'child_process';
+import multer from 'multer';
 import { ScannerService } from './services/ScannerService';
 import { GoogleContactsService } from './services/GoogleContactsService';
 import { CsvService } from './services/CsvService';
@@ -19,6 +21,9 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
+// Reactのビルドファイルを静的に配信する
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
 // 設定（実際にはDBやJSONから読み込む）
 let config = {
   scanFolder: path.resolve('./samples/input'),
@@ -29,12 +34,29 @@ let config = {
   isAutoEnabled: true
 };
 
+// アップロード設定 (Multer)
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    try {
+      await fs.mkdir(config.scanFolder, { recursive: true });
+      cb(null, config.scanFolder);
+    } catch (e: any) {
+      cb(e, config.scanFolder);
+    }
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'mobile-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage });
+
 // ヘルスチェック
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date() });
 });
 
-// スキャン実行（手動強制実行）
+// スキャン実行（手動強制実行用）
 app.post('/api/scan', async (req: Request, res: Response) => {
   console.log('Manual scan triggered');
   try {
@@ -42,6 +64,22 @@ app.post('/api/scan', async (req: Request, res: Response) => {
     res.json({ success: true, results });
   } catch (error: any) {
     console.error('Scan Error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// スマホ用アップロード＆即時スキャン
+app.post('/api/upload', upload.single('image'), async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: '画像がアップロードされていません。' });
+  }
+  
+  console.log('Image uploaded from mobile:', req.file.path);
+  try {
+    // 保存された画像を即座にスキャン
+    const results = await performScan();
+    res.json({ success: true, results });
+  } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -135,6 +173,13 @@ async function performScan() {
     }
   );
 }
+
+// Reactのルーティングフォールバック (API以外のすべてのリクエストはindex.htmlへ)
+app.get('*', (req: Request, res: Response) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+  }
+});
 
 // 定期実行の登録
 cron.schedule(config.schedule, () => {
