@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings as SettingsIcon, Camera, History, Smartphone, BarChart3, Clock, CheckCircle, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { Settings as SettingsIcon, Camera, History, Smartphone, BarChart3, Clock, CheckCircle, AlertCircle, RefreshCw, Download, X, Trash2 } from 'lucide-react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { GeminiService } from './services/gemini';
 import { GoogleContactsService } from './services/google';
@@ -15,6 +15,22 @@ interface QueueItem {
   resultName?: string;
 }
 
+// バッチ処理結果のエラー詳細
+interface ErrorDetail {
+  name: string;
+  company: string;
+  errorMessage: string;
+  previewUrl?: string;
+}
+
+// バッチ処理結果サマリー
+interface BatchResult {
+  successCount: number;
+  errorCount: number;
+  errors: ErrorDetail[];
+  timestamp: string;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'settings'>('home');
   const [googleToken, setGoogleToken] = useState<string>('');
@@ -23,6 +39,7 @@ function App() {
   // バッチスキャン用のキュー
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const addFileInputRef = useRef<HTMLInputElement>(null);
@@ -106,6 +123,9 @@ function App() {
     }
 
     setIsProcessingQueue(true);
+    let successCount = 0;
+    let errorCount = 0;
+    const errorDetails: ErrorDetail[] = [];
 
     try {
       // 未処理・エラーのものだけを対象にする
@@ -137,6 +157,7 @@ function App() {
           });
 
           setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'success', resultName: nameToSave } : q));
+          successCount++;
         } catch (e: any) {
           // エラー記録
           setQueue(prev => prev.map(q => q.id === item.id ? { ...q, status: 'error', errorDetail: e.message } : q));
@@ -146,13 +167,27 @@ function App() {
             success: false,
             warnings: [e.message]
           });
+          errorCount++;
+          errorDetails.push({
+            name: 'スキャン失敗',
+            company: '不明',
+            errorMessage: e.message,
+            previewUrl: item.previewUrl,
+          });
         }
       }
     } finally {
       setIsProcessingQueue(false);
       refreshStats();
+
+      // 結果サマリーを保存（ユーザーが消すまで表示）
+      setBatchResult({
+        successCount,
+        errorCount,
+        errors: errorDetails,
+        timestamp: new Date().toLocaleString('ja-JP'),
+      });
       
-      // 全て成功したら自動クリアしたい場合はここに入れる（今回は確認用に残す・または成功のものだけ除外する）
       // 成功したものだけをキューから削除する
       setTimeout(() => {
         setQueue(prev => prev.filter(i => i.status !== 'success'));
@@ -225,6 +260,68 @@ function App() {
             ) : (
               // Continuous/Queue State: サムネイル一覧と処理実行ボタン
               <div className="flex-1 flex flex-col pb-6">
+                {/* バッチ処理結果サマリー（ユーザーが消すまで表示） */}
+                {batchResult && !isProcessingQueue && (
+                  <div className="mb-4 rounded-2xl border shadow-sm overflow-hidden">
+                    {/* サマリーバー */}
+                    <div className={`p-4 flex justify-between items-center ${batchResult.errorCount > 0 ? 'bg-amber-50 border-b border-amber-200' : 'bg-green-50 border-b border-green-200'}`}>
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-1.5 text-green-600">
+                          <CheckCircle size={16} />
+                          <span className="font-bold text-sm">成功 {batchResult.successCount}件</span>
+                        </div>
+                        {batchResult.errorCount > 0 && (
+                          <div className="flex items-center gap-1.5 text-red-600">
+                            <AlertCircle size={16} />
+                            <span className="font-bold text-sm">エラー {batchResult.errorCount}件</span>
+                          </div>
+                        )}
+                        <span className="text-[10px] text-slate-400">{batchResult.timestamp}</span>
+                      </div>
+                      <button
+                        onClick={() => setBatchResult(null)}
+                        className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-white/50 transition-colors"
+                        title="結果を閉じる"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    {/* エラー詳細リスト（エラーがある時だけ表示） */}
+                    {batchResult.errorCount > 0 && batchResult.errors.length > 0 && (
+                      <div className="bg-white divide-y divide-slate-100">
+                        <div className="px-4 py-2 bg-red-50">
+                          <span className="text-[11px] font-bold text-red-700">⚠ エラーが発生した名刺</span>
+                        </div>
+                        {batchResult.errors.map((err, idx) => (
+                          <div key={idx} className="flex items-start gap-3 p-3">
+                            {err.previewUrl && (
+                              <img src={err.previewUrl} className="w-14 h-10 object-cover rounded-lg border shrink-0" alt="error card" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-700 truncate">{err.name} / {err.company}</p>
+                              <p className="text-[10px] text-red-500 mt-0.5 line-clamp-2">{err.errorMessage}</p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setBatchResult(prev => {
+                                  if (!prev) return null;
+                                  const newErrors = prev.errors.filter((_, i) => i !== idx);
+                                  return { ...prev, errors: newErrors, errorCount: newErrors.length };
+                                });
+                              }}
+                              className="text-slate-300 hover:text-red-500 p-1 shrink-0 transition-colors"
+                              title="このエラーを消す"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="bg-indigo-50 rounded-2xl p-4 mb-4 flex justify-between items-center border border-indigo-100 shadow-sm">
                   <div>
                     <p className="text-xs text-indigo-600 font-bold mb-1">未登録カード</p>
