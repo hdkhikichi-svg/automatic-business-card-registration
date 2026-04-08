@@ -43,7 +43,7 @@ function App() {
       localStorage.setItem('GOOGLE_ACCESS_TOKEN', codeResponse.access_token);
       alert('Google連絡先と連携されました！');
     },
-    scope: 'https://www.googleapis.com/auth/contacts/readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/contacts',
+    scope: 'https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/contacts',
     prompt: 'select_account',
     onError: (error: any) => alert('Googleログインに失敗: ' + error)
   });
