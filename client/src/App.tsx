@@ -159,7 +159,7 @@ function App() {
           const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
           resolve({ base64, mimeType });
         };
-        img.onerror = (error) => reject(new Error('画像の読み込みに失敗しました'));
+        img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
         img.src = event.target?.result as string;
       };
       reader.onerror = error => reject(error);
