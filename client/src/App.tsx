@@ -78,8 +78,18 @@ function App() {
   const scanErrorCount = queue.filter(q => q.status === 'error' && q.errorPhase === 'scan').length;
 
   useEffect(() => {
-    // 初回ロード時に状態を復元 (Googleトークンのみ)
-    setGoogleToken(localStorage.getItem('GOOGLE_ACCESS_TOKEN') || '');
+    // 初回ロード時に状態を復元 (Googleトークンと有効期限)
+    const savedToken = localStorage.getItem('GOOGLE_ACCESS_TOKEN');
+    const expiresAt = localStorage.getItem('GOOGLE_TOKEN_EXPIRES_AT');
+    if (savedToken && expiresAt) {
+      if (Date.now() > parseInt(expiresAt, 10)) {
+        setGoogleToken('');
+        localStorage.removeItem('GOOGLE_ACCESS_TOKEN');
+        localStorage.removeItem('GOOGLE_TOKEN_EXPIRES_AT');
+      } else {
+        setGoogleToken(savedToken);
+      }
+    }
     refreshStats();
   }, []);
 
@@ -91,6 +101,10 @@ function App() {
     onSuccess: (codeResponse: any) => {
       setGoogleToken(codeResponse.access_token);
       localStorage.setItem('GOOGLE_ACCESS_TOKEN', codeResponse.access_token);
+      // トークン有効期限(秒)を取得し、日時(ミリ秒)を保存 (デフォルト1時間)
+      const expiresIn = codeResponse.expires_in || 3600;
+      const expiresAt = Date.now() + expiresIn * 1000;
+      localStorage.setItem('GOOGLE_TOKEN_EXPIRES_AT', expiresAt.toString());
       alert('Google連絡先と連携されました！');
     },
     scope: 'https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly https://www.googleapis.com/auth/contacts',
@@ -153,6 +167,12 @@ function App() {
   // ステップ1: AI解析のみ実行
   // ============================
   const scanQueue = async () => {
+    // スキャン前の期限切れ・未連携チェック
+    if (!googleToken) {
+      alert('Google連絡先との連携が切れています（または未連携です）。画面から連携を行ってください。');
+      return;
+    }
+
     setIsScanningQueue(true);
 
     // 未解析 または スキャンエラーのものだけを対象にする
@@ -395,6 +415,25 @@ function App() {
                  キュー表示: 連続スキャン＆一括登録UI
                  ==================================== */
               <div className="flex-1 flex flex-col pb-6">
+
+                {/* Google連携警告バナー */}
+                {!googleToken && (
+                  <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between shadow-sm animate-in fade-in">
+                    <div className="flex items-center gap-2 text-amber-700">
+                      <AlertCircle size={18} className="shrink-0" />
+                      <span className="text-[11px] md:text-xs font-bold leading-tight">
+                        Google連携が未設定または期限切れです。<br className="md:hidden" />
+                        スキャン前に連携してください。
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => loginGoogle()}
+                      className="shrink-0 text-[10px] md:text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-lg font-bold transition-colors shadow-sm active:scale-95"
+                    >
+                      連携する
+                    </button>
+                  </div>
+                )}
 
                 {/* バッチ処理結果サマリー（ユーザーが消すまで表示） */}
                 {batchResult && !isRegisteringQueue && (
