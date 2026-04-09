@@ -22,9 +22,20 @@ export class GeminiService {
       const apiErrorDetail = error.response?.data?.error;
       if (apiErrorDetail) {
         // オブジェクトが返ってきた場合に [object Object] になるのを防ぐため、文字列に変換
-        const errorMessage = typeof apiErrorDetail === 'string' 
+        let errorMessage = typeof apiErrorDetail === 'string' 
           ? apiErrorDetail 
           : (apiErrorDetail.message || JSON.stringify(apiErrorDetail));
+          
+        // 英語のエラーメッセージを分かりやすい日本語に変換
+        const lowerMsg = errorMessage.toLowerCase();
+        if (lowerMsg.includes('high demand') || lowerMsg.includes('429') || lowerMsg.includes('too many requests')) {
+          errorMessage = '現在AIサーバーが大変混み合っています。少し時間をおいてから再度お試しください。';
+        } else if (lowerMsg.includes('quota') || lowerMsg.includes('limit')) {
+          errorMessage = 'AIの利用上限に達しました。しばらく経ってからお試しください。';
+        } else if (lowerMsg.includes('api key')) {
+          errorMessage = 'システムエラー: AIのAPIキーが無効です。';
+        }
+
         throw new Error(errorMessage);
       }
       
