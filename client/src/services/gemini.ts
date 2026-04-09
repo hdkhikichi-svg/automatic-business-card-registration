@@ -34,6 +34,8 @@ export class GeminiService {
           errorMessage = 'AIの利用上限に達しました。しばらく経ってからお試しください。';
         } else if (lowerMsg.includes('api key')) {
           errorMessage = 'システムエラー: AIのAPIキーが無効です。';
+        } else if (lowerMsg.includes('request entity too large') || lowerMsg.includes('413')) {
+          errorMessage = '写真のデータサイズが大きすぎます。容量を減らして再度お試しください。';
         }
 
         throw new Error(errorMessage);

@@ -116,17 +116,51 @@ function App() {
     alert('設定を保存しました。');
   };
 
-  // 写真ファイルからBase64文字列を作る
+  // 写真ファイルから圧縮されたBase64文字列を作る
   const getBase64 = (file: File): Promise<{ base64: string, mimeType: string }> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
-      reader.onload = () => {
-        const result = reader.result?.toString() || '';
-        const mimeType = result.match(/^data:(image\/\w+);base64,/)?.[1] || 'image/jpeg';
-        // ヘッダを除去
-        const base64 = result.replace(/^data:.*,/, '');
-        resolve({ base64, mimeType });
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          // アスペクト比を維持してリサイズ計算
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= Math.round(MAX_WIDTH / width); // floatを防ぐ
+              height = Math.round(img.height * (MAX_WIDTH / img.width));
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = Math.round(img.width * (MAX_HEIGHT / img.height));
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvasを利用できません。'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // 画質を少し落としてJPEG形式で出力 (0.7 = 70% quality)
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          const mimeType = 'image/jpeg';
+          const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+          resolve({ base64, mimeType });
+        };
+        img.onerror = (error) => reject(new Error('画像の読み込みに失敗しました'));
+        img.src = event.target?.result as string;
       };
       reader.onerror = error => reject(error);
     });
