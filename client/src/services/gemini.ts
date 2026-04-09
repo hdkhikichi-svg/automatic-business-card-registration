@@ -21,7 +21,11 @@ export class GeminiService {
       
       const apiErrorDetail = error.response?.data?.error;
       if (apiErrorDetail) {
-        throw new Error(apiErrorDetail);
+        // オブジェクトが返ってきた場合に [object Object] になるのを防ぐため、文字列に変換
+        const errorMessage = typeof apiErrorDetail === 'string' 
+          ? apiErrorDetail 
+          : (apiErrorDetail.message || JSON.stringify(apiErrorDetail));
+        throw new Error(errorMessage);
       }
       
       throw new Error(`AI解析通信エラー: ${error.message}`);
