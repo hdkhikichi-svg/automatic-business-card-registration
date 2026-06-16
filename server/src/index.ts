@@ -2,16 +2,8 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import cron from 'node-cron';
 import path from 'path';
-import fs from 'fs/promises';
-import { exec } from 'child_process';
-import multer from 'multer';
-import { ScannerService } from './services/ScannerService';
-import { GoogleContactsService } from './services/GoogleContactsService';
-import { CsvService } from './services/CsvService';
-import { HistoryService } from './services/HistoryService';
-import type { BusinessCard } from './types/BusinessCard';
+import { GeminiService } from './services/GeminiService';
 
 dotenv.config();
 
@@ -19,173 +11,38 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
+// Increase limit for base64 images
 app.use(express.json({ limit: '50mb' }));
 
-// Reactのビルドファイルを静的に配信する
+// Serve React static files
 app.use(express.static(path.join(__dirname, '../../client/dist')));
 
-// 設定（実際にはDBやJSONから読み込む）
-let config = {
-  scanFolder: path.resolve('./samples/input'),
-  successFolder: path.resolve('./samples/output/success'),
-  errorFolder: path.resolve('./samples/output/error'),
-  csvPath: path.resolve('./samples/output/contacts.csv'),
-  schedule: '0 10 * * *', // 毎日 10:00
-  isAutoEnabled: true
-};
-
-// アップロード設定 (Multer)
-const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    try {
-      await fs.mkdir(config.scanFolder, { recursive: true });
-      cb(null, config.scanFolder);
-    } catch (e: any) {
-      cb(e, config.scanFolder);
-    }
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'mobile-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage });
-
-// ヘルスチェック
+// Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', time: new Date() });
 });
 
-// スキャン実行（手動強制実行用）
-app.post('/api/scan', async (req: Request, res: Response) => {
-  console.log('Manual scan triggered');
-  try {
-    const results = await performScan();
-    res.json({ success: true, results });
-  } catch (error: any) {
-    console.error('Scan Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// スマホ用アップロード＆即時スキャン
-app.post('/api/upload', upload.single('image'), async (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ success: false, error: '画像がアップロードされていません。' });
-  }
+// Proxy endpoint for Gemini parsing
+app.post('/api/parse-card', async (req: Request, res: Response) => {
+  const { base64Image, mimeType } = req.body;
   
-  console.log('Image uploaded from mobile:', req.file.path);
-  try {
-    // 保存された画像を即座にスキャン
-    const results = await performScan();
-    res.json({ success: true, results });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  if (!base64Image) {
+    return res.status(400).json({ error: 'base64Image is required' });
   }
-});
 
-// 設定取得
-app.get('/api/settings', (req: Request, res: Response) => {
-  res.json(config);
-});
-
-// Windows専用: フォルダ参照ダイアログを開いてパスを取得する
-app.get('/api/browse-folder', (req: Request, res: Response) => {
-  const script = `
-    Add-Type -AssemblyName System.windows.forms;
-    $f = New-Object System.Windows.Forms.FolderBrowserDialog;
-    $f.Description = 'スキャン対象のフォルダを選択してください';
-    $f.ShowNewFolderButton = $true;
-    if($f.ShowDialog() -eq 'OK') { Write-Output $f.SelectedPath }
-  `.replace(/\n/g, ' ');
-
-  exec(`powershell.exe -WindowStyle Hidden -STA -NoProfile -Command "${script}"`, (error, stdout, stderr) => {
-    if (error) {
-       console.error('Browse Folder Error:', error);
-       return res.status(500).json({ error: error.message });
-    }
-    const selectedPath = stdout.trim();
-    res.json({ path: selectedPath });
-  });
-});
-
-// 設定更新
-app.post('/api/settings', (req: Request, res: Response) => {
-  config = { ...config, ...req.body };
-  res.json({ success: true, config });
-});
-
-// 履歴・統計取得
-app.get('/api/history', async (req: Request, res: Response) => {
   try {
-    const stats = await HistoryService.getStats();
-    res.json(stats);
+    const cardData = await GeminiService.parseBusinessCard(base64Image);
+    res.json(cardData);
   } catch (error: any) {
+    console.error('Gemini API Proxy Error:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// OAuth 認証用エンドポイント
-app.get('/api/auth/url', async (req: Request, res: Response) => {
-  try {
-    const url = await GoogleContactsService.getAuthUrl();
-    res.json({ url });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/auth/callback', async (req: Request, res: Response) => {
-  const { code } = req.query;
-  if (code) {
-    await GoogleContactsService.saveToken(code as string);
-    res.send('Authentication successful! You can close this window.');
-  } else {
-    res.status(400).send('No code provided');
-  }
-});
-
-async function performScan() {
-  console.log('Scanning folder:', config.scanFolder);
-  
-  return await ScannerService.scanFolder(
-    config.scanFolder,
-    config.successFolder,
-    config.errorFolder,
-    async (card: BusinessCard, fileName: string) => {
-      // 1. Google 連絡先登録
-      try {
-        await GoogleContactsService.createContact(card);
-      } catch (e: any) {
-        console.error(`Google Contact creation failed for ${fileName}:`, e.message);
-        throw e;
-      }
-
-      // 2. Outlook CSV 追記
-      await CsvService.appendToCsv(config.csvPath, card);
-
-      // 3. 履歴に保存
-      await HistoryService.addRecord({
-        name: [card.lastName, card.firstName].filter(Boolean).join(' '),
-        company: card.company || 'Unknown',
-        success: true
-      });
-    }
-  );
-}
-
-// Reactのルーティングフォールバック (API以外のすべてのリクエストはindex.htmlへ)
+// React routing fallback
 app.get('*', (req: Request, res: Response) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
-  }
-});
-
-// 定期実行の登録
-cron.schedule(config.schedule, () => {
-  if (config.isAutoEnabled) {
-    console.log('Scheduled scan starting...');
-    performScan();
   }
 });
 

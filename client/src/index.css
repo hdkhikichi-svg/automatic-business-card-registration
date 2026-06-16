@@ -7,18 +7,48 @@
   }
 
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    background-color: var(--color-slate-50);
+    color: var(--color-slate-900);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     font-family: 'Inter', system-ui, sans-serif;
   }
 }
 
 @layer components {
   .glass-card {
-    @apply bg-white border border-slate-200 rounded-2xl p-6 shadow-sm;
+    background-color: white;
+    border: 1px solid var(--color-slate-200);
+    border-radius: var(--radius-2xl);
+    padding: var(--spacing-6);
+    box-shadow: var(--shadow-sm);
   }
   
   .btn-primary {
-    @apply bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-xl 
-           transition-all duration-200 active:scale-95 shadow-md shadow-indigo-600/20 disabled:opacity-50 disabled:pointer-events-none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--color-indigo-600);
+    color: white;
+    font-weight: var(--font-weight-medium);
+    padding: var(--spacing-3) var(--spacing-6);
+    border-radius: var(--radius-xl);
+    transition: all 0.2s;
+    box-shadow: var(--shadow-md);
+    --tw-shadow-color: rgb(79 70 229 / 0.2);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-indigo-700);
+  }
+
+  .btn-primary:active {
+    transform: scale(0.95);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    pointer-events: none;
   }
 }
+

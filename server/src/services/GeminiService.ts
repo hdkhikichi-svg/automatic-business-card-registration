@@ -4,7 +4,7 @@ import type { BusinessCard } from '../types/BusinessCard';
 export class GeminiService {
   static async parseBusinessCard(base64Image: string): Promise<BusinessCard> {
     const API_KEY = process.env.GEMINI_API_KEY || '';
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro-preview:generateContent?key=${API_KEY}`;
     
     const prompt = `
       Extract business card information from this image.

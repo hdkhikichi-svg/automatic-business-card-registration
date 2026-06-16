@@ -5,13 +5,18 @@ export class GeminiService {
   /**
    * 画像データをサーバーサイドAPI (/api/parse-card) に送信し、名刺解析結果を取得します。
    * APIキーはサーバー側の環境変数で管理されるため、フロントエンドには露出しません。
+   * サーバー側で指数バックオフ付きリトライが実装されているため、
+   * フロントエンド側ではタイムアウトを長めに設定しています。
    */
   static async parseBusinessCard(base64Image: string, mimeType: string = 'image/jpeg'): Promise<BusinessCard> {
     try {
-      // 自身がデプロイされているドメインの /api/parse-card エンドポイントを呼び出す
+      // サーバー側リトライを考慮し、タイムアウトを90秒に設定
+      // （最大3回リトライ × 各30秒タイムアウト + バックオフ待ち時間）
       const response = await axios.post('/api/parse-card', {
         base64Image,
         mimeType
+      }, {
+        timeout: 90000, // 90秒
       });
 
       // サーバーレス関数が解析済みのオブジェクトを直接返却する想定
@@ -19,28 +24,27 @@ export class GeminiService {
     } catch (error: any) {
       console.error('Gemini Backend Error:', error.response?.data || error.message);
       
+      // === サーバーからのエラーレスポンスがある場合 ===
       const apiErrorDetail = error.response?.data?.error;
       if (apiErrorDetail) {
         // オブジェクトが返ってきた場合に [object Object] になるのを防ぐため、文字列に変換
-        let errorMessage = typeof apiErrorDetail === 'string' 
+        const errorMessage = typeof apiErrorDetail === 'string' 
           ? apiErrorDetail 
           : (apiErrorDetail.message || JSON.stringify(apiErrorDetail));
-          
-        // 英語のエラーメッセージを分かりやすい日本語に変換
-        const lowerMsg = errorMessage.toLowerCase();
-        if (lowerMsg.includes('high demand') || lowerMsg.includes('429') || lowerMsg.includes('too many requests')) {
-          errorMessage = '現在AIサーバーが大変混み合っています。少し時間をおいてから再度お試しください。';
-        } else if (lowerMsg.includes('quota') || lowerMsg.includes('limit')) {
-          errorMessage = 'AIの利用上限に達しました。しばらく経ってからお試しください。';
-        } else if (lowerMsg.includes('api key')) {
-          errorMessage = 'システムエラー: AIのAPIキーが無効です。';
-        } else if (lowerMsg.includes('request entity too large') || lowerMsg.includes('413')) {
-          errorMessage = '写真のデータサイズが大きすぎます。容量を減らして再度お試しください。';
-        }
-
+        
+        // サーバー側で既に日本語の詳細エラーメッセージを生成済みなので、そのまま表示
         throw new Error(errorMessage);
       }
       
+      // === ネットワークエラー等（サーバーに到達できなかった場合）===
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        throw new Error('サーバーとの通信がタイムアウトしました。サーバー側でリトライ中の可能性があります。少し待ってから再度お試しください。');
+      }
+
+      if (!error.response) {
+        throw new Error('サーバーに接続できませんでした。ネットワーク接続を確認してください。');
+      }
+
       throw new Error(`AI解析通信エラー: ${error.message}`);
     }
   }
