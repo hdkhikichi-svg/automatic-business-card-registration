@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import dotenv from 'dotenv';
 import path from 'path';
 import { GeminiService } from './services/GeminiService';
@@ -10,9 +11,14 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Basic security headers
+app.use(helmet({
+  contentSecurityPolicy: false, // Reactアプリのインラインスクリプト等を許容するため無効化
+}));
+
 app.use(cors());
-// Increase limit for base64 images
-app.use(express.json({ limit: '50mb' }));
+// Reduce limit to 10mb to prevent DoS (50mb is excessively large for an image)
+app.use(express.json({ limit: '10mb' }));
 
 // Serve React static files
 app.use(express.static(path.join(__dirname, '../../client/dist')));
